@@ -113,10 +113,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
   position: absolute; top: 10px; left: 10px; background: var(--fg); color: var(--bg);
   font: 600 11px/1 var(--font-body); letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px; border-radius: 6px;
 }
-.meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; }
+.meta { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
 .fname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
-.mini { display: flex; gap: 6px; flex: none; }
-.mini .btn { padding: 7px 10px; font-size: 13px; }
+.mini { display: flex; gap: 6px; }
+.mini .btn { flex: 1; min-width: 0; padding: 8px 8px; font-size: 13px; }
+.mini .btn.edit { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
 
 .slot {
   min-height: 200px; border: 2px dashed var(--line); border-radius: 14px; background: transparent;
@@ -131,6 +132,35 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
 .status { min-height: 20px; font-size: 13px; color: var(--muted); margin: 0; }
 .status.ok { color: var(--good); }
 .hidden-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+[hidden] { display: none !important; }
+
+/* ---------- editor sensor ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 50; background: rgba(4, 12, 11, .78);
+  display: flex; align-items: center; justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.sheet {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  width: 100%; max-width: 980px; max-height: 100%; overflow: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.sheet-head > div { min-width: 0; }
+.sheet h2 { margin: 0 0 2px; font: 800 20px/1.1 var(--font-display); font-stretch: 112%; text-transform: uppercase; }
+.stage {
+  display: flex; justify-content: center; padding: 8px; border-radius: 10px; min-width: 0;
+  background: repeating-conic-gradient(var(--bg) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px;
+}
+.stage-in { position: relative; line-height: 0; flex: none; }
+#ed-base { display: block; }
+#ed-over { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.tools { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+.tools .field { min-width: 0; }
+.tools .grow { flex: 1 1 200px; }
+.tools .seg { min-width: 250px; }
+@media (max-width: 520px) { .tools .seg { min-width: 0; width: 100%; } }
+.warn { color: var(--muted); font-size: 13px; margin: 0; }
 </style>
 
 <div class="wrap">
@@ -138,7 +168,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
     <div class="logo"><img id="logo" alt="Logo Toko Robux Kavza"></div>
     <div>
       <h1>Stempel Foto Kavza</h1>
-      <p class="sub">Pasang stempel Toko Robux Kavza ke maksimal 4 foto sekaligus, lalu unduh hasilnya satu per satu atau semuanya dalam satu file zip.</p>
+      <p class="sub">Pasang stempel Toko Robux Kavza ke maksimal 4 foto sekaligus, sensor bagian yang sensitif dengan blur atau mosaik, lalu unduh hasilnya satu per satu atau sebagai zip.</p>
     </div>
   </header>
 
@@ -200,6 +230,40 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
     </section>
   </div>
   <input type="file" id="file" class="hidden-input" accept="image/*" multiple aria-label="Pilih foto">
+</div>
+
+<div class="modal" id="editor" hidden role="dialog" aria-modal="true" aria-labelledby="ed-title">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div>
+        <h2 id="ed-title">Sensor bagian foto</h2>
+        <p class="note" id="ed-name"></p>
+      </div>
+      <button type="button" class="btn primary" id="ed-done">Selesai</button>
+    </div>
+    <p class="note">Seret di atas foto untuk memilih bagian yang mau ditutup. Kamu bisa membuat beberapa bagian sekaligus.</p>
+    <div class="stage" id="stage"><div class="stage-in"><canvas id="ed-base"></canvas><canvas id="ed-over" aria-label="Area gambar untuk memilih bagian yang disensor"></canvas></div></div>
+    <div class="tools">
+      <div class="field">
+        <div class="label">Jenis sensor</div>
+        <div class="seg" id="seg-emode">
+          <button type="button" data-v="blur" aria-pressed="true">Blur</button>
+          <button type="button" data-v="mosaik" aria-pressed="false">Mosaik</button>
+          <button type="button" data-v="blok" aria-pressed="false">Blok hitam</button>
+        </div>
+      </div>
+      <div class="field grow">
+        <div class="label-row"><label class="label" for="ed-level">Kekuatan</label><span class="value" id="ed-level-v"></span></div>
+        <input type="range" id="ed-level" min="1" max="10" step="1">
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" id="ed-undo">Batalkan terakhir</button>
+        <button type="button" class="btn" id="ed-clear">Hapus semua sensor</button>
+      </div>
+    </div>
+    <p class="warn" id="ed-count"></p>
+    <p class="warn">Untuk data yang sangat sensitif seperti nomor kartu, password, atau NIK, pilih Blok hitam karena tidak bisa dipulihkan.</p>
+  </div>
 </div>
 
 <script>
@@ -323,12 +387,70 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
   }
 
   /* ---------- gambar ke canvas ---------- */
-  function paint(canvas, src, w, h) {
+  function paint(canvas, src, w, h, regions, noStamp) {
     canvas.width = w; canvas.height = h;
     var g = canvas.getContext("2d");
     g.imageSmoothingQuality = "high";
     g.drawImage(src, 0, 0, w, h);
-    drawStamp(g, w, h);
+    applyRegions(g, w, h, regions);
+    if (!noStamp) drawStamp(g, w, h);
+  }
+
+  /* ---------- sensor: blur, mosaik, blok hitam ---------- */
+  function shrink(src, sx, sy, sw, sh, tw, th) {
+    var cur = src, cx = sx, cy = sy, cw = sw, ch = sh;
+    while (cw > tw * 2 || ch > th * 2) {
+      var nw = Math.max(tw, Math.ceil(cw / 2)), nh = Math.max(th, Math.ceil(ch / 2));
+      var n = document.createElement("canvas");
+      n.width = nw; n.height = nh;
+      var ng = n.getContext("2d");
+      ng.imageSmoothingQuality = "high";
+      ng.drawImage(cur, cx, cy, cw, ch, 0, 0, nw, nh);
+      cur = n; cx = 0; cy = 0; cw = nw; ch = nh;
+    }
+    var out = document.createElement("canvas");
+    out.width = tw; out.height = th;
+    var og = out.getContext("2d");
+    og.imageSmoothingQuality = "high";
+    og.drawImage(cur, cx, cy, cw, ch, 0, 0, tw, th);
+    return out;
+  }
+
+  function applyRegions(g, w, h, regions) {
+    if (!regions || !regions.length) return;
+    var base = Math.min(w, h), src = g.canvas;
+    regions.forEach(function (r) {
+      var rx = Math.max(0, Math.round(r.x * w)), ry = Math.max(0, Math.round(r.y * h));
+      var rw = Math.min(w - rx, Math.round(r.w * w)), rh = Math.min(h - ry, Math.round(r.h * h));
+      if (rw < 1 || rh < 1) return;
+      g.save();
+      g.beginPath(); g.rect(rx, ry, rw, rh); g.clip();
+      if (r.mode === "blok") {
+        g.fillStyle = "#0b0b0b"; g.fillRect(rx, ry, rw, rh);
+      } else {
+        var cell = Math.max(3, Math.round(base * (0.004 + r.level * 0.004)));
+        var tw = Math.max(1, Math.ceil(rw / cell)), th = Math.max(1, Math.ceil(rh / cell));
+        var u = shrink(src, rx, ry, rw, rh, tw, th), uw = tw, uh = th;
+        if (r.mode === "mosaik") {
+          g.imageSmoothingEnabled = false;
+          g.drawImage(u, 0, 0, uw, uh, rx, ry, rw, rh);
+        } else {
+          while (uw * 2 <= rw || uh * 2 <= rh) {
+            var nw = Math.min(rw, uw * 2), nh = Math.min(rh, uh * 2);
+            var n = document.createElement("canvas");
+            n.width = nw; n.height = nh;
+            var ng = n.getContext("2d");
+            ng.imageSmoothingQuality = "high";
+            ng.drawImage(u, 0, 0, uw, uh, 0, 0, nw, nh);
+            u = n; uw = nw; uh = nh;
+          }
+          g.imageSmoothingEnabled = true;
+          g.imageSmoothingQuality = "high";
+          g.drawImage(u, 0, 0, uw, uh, rx, ry, rw, rh);
+        }
+      }
+      g.restore();
+    });
   }
 
   function previewSize(w, h) {
@@ -348,7 +470,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
       var id = cvs[i].getAttribute("data-id");
       if (id === "sample") { paint(cvs[i], sample, 1200, 800); continue; }
       var it = items.filter(function (x) { return String(x.id) === id; })[0];
-      if (it) { var sz = previewSize(it.w, it.h); paint(cvs[i], it.bmp, sz[0], sz[1]); }
+      if (it) { var sz = previewSize(it.w, it.h); paint(cvs[i], it.bmp, sz[0], sz[1], it.regions); }
     }
   }
 
@@ -386,6 +508,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
       var meta = el("div", "meta");
       meta.appendChild(el("span", "fname", it.name));
       var mini = el("div", "mini");
+      var ed = el("button", "btn edit", it.regions.length ? "Sensor (" + it.regions.length + ")" : "Sensor");
+      ed.type = "button"; ed.setAttribute("data-sensor", it.id);
+      ed.setAttribute("aria-label", "Sensor bagian foto " + it.name);
+      ed.addEventListener("click", function () { openEditor(it); });
       var dl = el("button", "btn", "Unduh"); dl.type = "button";
       dl.addEventListener("click", function () { downloadOne(it, idx); });
       var rm = el("button", "btn", "Hapus"); rm.type = "button";
@@ -395,7 +521,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
         if (it.bmp && it.bmp.close) it.bmp.close();
         say(""); render();
       });
-      mini.appendChild(dl); mini.appendChild(rm);
+      mini.appendChild(ed); mini.appendChild(dl); mini.appendChild(rm);
       meta.appendChild(mini);
       card.appendChild(meta);
       grid.appendChild(card);
@@ -443,7 +569,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
     Promise.all(take.map(function (f) {
       return loadBitmap(f).then(function (b) {
         var w = b.width || b.naturalWidth, h = b.height || b.naturalHeight;
-        return { id: nextId++, name: f.name || "foto", bmp: b, w: w, h: h };
+        return { id: nextId++, name: f.name || "foto", bmp: b, w: w, h: h, regions: [] };
       }).catch(function () { return null; });
     })).then(function (res) {
       var ok = res.filter(Boolean);
@@ -464,7 +590,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
     var k = Math.min(1, MAX_SIDE / Math.max(it.w, it.h));
     var w = Math.round(it.w * k), h = Math.round(it.h * k);
     var c = document.createElement("canvas");
-    paint(c, it.bmp, w, h);
+    paint(c, it.bmp, w, h, it.regions);
     var type = S.format === "png" ? "image/png" : "image/jpeg";
     return new Promise(function (res, rej) {
       c.toBlob(function (b) { b ? res(b) : rej(new Error("gagal")); }, type, 0.93);
@@ -588,6 +714,120 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
     work.addEventListener(ev, function (e) { e.preventDefault(); work.classList.remove("drag"); });
   });
   work.addEventListener("drop", function (e) { addFiles(e.dataTransfer && e.dataTransfer.files); });
+
+  /* ---------- editor sensor ---------- */
+  var edEl = $("editor"), edBase = $("ed-base"), edOver = $("ed-over");
+  var E = { mode: "blur", level: 6 };
+  var cur = null, edW = 0, edH = 0, drag = null;
+
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+  function paintBase() {
+    paint(edBase, cur.bmp, edW, edH, cur.regions, true);
+    edOver.width = edW; edOver.height = edH;
+    drawOverlay();
+  }
+  function box(g, r, lw) {
+    var x = r.x * edW, y = r.y * edH, w = r.w * edW, h = r.h * edH;
+    g.lineWidth = lw; g.setLineDash([lw * 4, lw * 3]);
+    g.strokeStyle = "#ffffff"; g.lineDashOffset = 0; g.strokeRect(x, y, w, h);
+    g.strokeStyle = "#000000"; g.lineDashOffset = lw * 4; g.strokeRect(x, y, w, h);
+  }
+  function drawOverlay() {
+    var g = edOver.getContext("2d");
+    g.clearRect(0, 0, edW, edH);
+    var lw = Math.max(2, edW / 450);
+    cur.regions.forEach(function (r) { box(g, r, lw); });
+    if (drag) box(g, { x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1), w: Math.abs(drag.x1 - drag.x0), h: Math.abs(drag.y1 - drag.y0) }, lw);
+  }
+  function fitEditor() {
+    if (!cur) return;
+    var st = $("stage");
+    var availW = Math.max(120, st.clientWidth - 16);
+    var availH = Math.max(160, window.innerHeight * 0.5);
+    var k = Math.min(availW / edW, availH / edH);
+    edBase.style.width = Math.round(edW * k) + "px";
+    edBase.style.height = Math.round(edH * k) + "px";
+  }
+  function syncEditor() {
+    var bs = $("seg-emode").querySelectorAll("button");
+    for (var i = 0; i < bs.length; i++) bs[i].setAttribute("aria-pressed", String(bs[i].getAttribute("data-v") === E.mode));
+    $("ed-level").value = E.level;
+    $("ed-level").disabled = E.mode === "blok";
+    $("ed-level-v").textContent = E.mode === "blok" ? "-" : E.level + " / 10";
+    var n = cur ? cur.regions.length : 0;
+    $("ed-undo").disabled = n === 0;
+    $("ed-clear").disabled = n === 0;
+    $("ed-count").textContent = n === 0 ? "Belum ada bagian yang disensor." : n + " bagian disensor.";
+  }
+
+  function openEditor(it) {
+    cur = it; drag = null;
+    var k = Math.min(1, 1400 / Math.max(it.w, it.h));
+    edW = Math.round(it.w * k); edH = Math.round(it.h * k);
+    $("ed-name").textContent = it.name;
+    edEl.hidden = false;
+    try { document.body.style.overflow = "hidden"; } catch (e) {}
+    syncEditor(); fitEditor(); paintBase();
+    $("ed-done").focus();
+  }
+  function closeEditor() {
+    if (!cur) return;
+    var id = cur.id;
+    cur = null; drag = null;
+    edEl.hidden = true;
+    try { document.body.style.overflow = ""; } catch (e) {}
+    render();
+    var b = grid.querySelector('[data-sensor="' + id + '"]');
+    if (b) b.focus();
+  }
+  function undoRegion() {
+    if (!cur || !cur.regions.length) return;
+    cur.regions.pop(); syncEditor(); paintBase();
+  }
+
+  function pt(e) {
+    var r = edOver.getBoundingClientRect();
+    return [clamp01((e.clientX - r.left) / r.width), clamp01((e.clientY - r.top) / r.height)];
+  }
+  edOver.addEventListener("pointerdown", function (e) {
+    if (!cur || (e.pointerType === "mouse" && e.button !== 0)) return;
+    e.preventDefault();
+    try { edOver.setPointerCapture(e.pointerId); } catch (err) {}
+    var p = pt(e);
+    drag = { x0: p[0], y0: p[1], x1: p[0], y1: p[1] };
+  });
+  edOver.addEventListener("pointermove", function (e) {
+    if (!drag) return;
+    var p = pt(e); drag.x1 = p[0]; drag.y1 = p[1];
+    drawOverlay();
+  });
+  edOver.addEventListener("pointerup", function (e) {
+    if (!drag) return;
+    var p = pt(e); drag.x1 = p[0]; drag.y1 = p[1];
+    var r = { x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1), w: Math.abs(drag.x1 - drag.x0), h: Math.abs(drag.y1 - drag.y0), mode: E.mode, level: E.level };
+    drag = null;
+    if (r.w >= 0.01 && r.h >= 0.01) { cur.regions.push(r); syncEditor(); paintBase(); }
+    else drawOverlay();
+  });
+  edOver.addEventListener("pointercancel", function () { drag = null; if (cur) drawOverlay(); });
+
+  $("seg-emode").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-v]");
+    if (!b) return;
+    E.mode = b.getAttribute("data-v"); syncEditor();
+  });
+  $("ed-level").addEventListener("input", function (e) { E.level = +e.target.value; syncEditor(); });
+  $("ed-undo").addEventListener("click", undoRegion);
+  $("ed-clear").addEventListener("click", function () { if (cur) { cur.regions = []; syncEditor(); paintBase(); } });
+  $("ed-done").addEventListener("click", closeEditor);
+  edEl.addEventListener("pointerdown", function (e) { if (e.target === edEl) closeEditor(); });
+  document.addEventListener("keydown", function (e) {
+    if (edEl.hidden) return;
+    if (e.key === "Escape") { e.preventDefault(); closeEditor(); }
+    else if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); undoRegion(); }
+  });
+  window.addEventListener("resize", fitEditor);
 
   /* ---------- mulai ---------- */
   buildPosGrid();
